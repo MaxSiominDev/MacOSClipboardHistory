@@ -1,0 +1,42 @@
+#!/bin/sh
+case "$1" in
+    "")
+        exec open "clipboardhistory://show"
+        ;;
+    --theme)
+        case "$2" in
+            default|jewish)
+                open "clipboardhistory://theme?value=$2"
+                ;;
+            *)
+                echo "Usage: cliph --theme default|jewish" >&2
+                exit 64
+                ;;
+        esac
+        ;;
+    --israel)
+        case "$2" in
+            enable|on)
+                open "clipboardhistory://theme?value=jewish"
+                ;;
+            disable|off)
+                open "clipboardhistory://theme?value=default"
+                ;;
+            *)
+                exit 64
+                ;;
+        esac
+        ;;
+    -h|--help)
+        cat <<EOF
+Usage:
+  cliph                     Open the ClipboardHistory panel
+  cliph --theme default     Use the default theme
+  cliph --theme jewish      Use the Jewish theme
+EOF
+        ;;
+    *)
+        echo "Usage: cliph [--theme default|jewish]" >&2
+        exit 64
+        ;;
+esac
