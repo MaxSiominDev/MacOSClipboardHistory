@@ -128,4 +128,168 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.items.count, 1)
         XCTAssertEqual(reloaded.items.first?.content, .text("persist me"))
     }
+
+    // MARK: - Pin
+
+    func testTogglePinMovesItemToTop() {
+        let store = makeStore()
+        store.addItem(ClipboardItem(content: .text("a")))
+        let target = ClipboardItem(content: .text("target"))
+        store.addItem(target)
+        store.addItem(ClipboardItem(content: .text("c")))
+
+        store.togglePin(id: target.id)
+
+        XCTAssertEqual(store.items.first?.id, target.id)
+        XCTAssertTrue(store.items.first?.isPinned ?? false)
+        XCTAssertEqual(store.pinnedCount, 1)
+    }
+
+    func testUnpinMovesItemToTopOfUnpinnedSection() {
+        let store = makeStore()
+        let a = ClipboardItem(content: .text("a"))
+        let b = ClipboardItem(content: .text("b"))
+        store.addItem(a)
+        store.addItem(b)
+        store.togglePin(id: a.id)
+
+        store.togglePin(id: a.id)
+
+        XCTAssertEqual(store.pinnedCount, 0)
+        XCTAssertEqual(store.items.first?.id, a.id)
+        XCTAssertFalse(store.items.first?.isPinned ?? true)
+    }
+
+    func testPinLimitIsEnforced() {
+        let store = makeStore()
+        var pinnable: [ClipboardItem] = []
+        for i in 0..<(HistoryStore.pinLimit + 5) {
+            let item = ClipboardItem(content: .text("\(i)"))
+            store.addItem(item)
+            pinnable.append(item)
+        }
+        for item in pinnable {
+            store.togglePin(id: item.id)
+        }
+        XCTAssertEqual(store.pinnedCount, HistoryStore.pinLimit)
+    }
+
+    func testPinnedItemsAreNotEvictedByLimit() {
+        let store = makeStore()
+        let pinned = ClipboardItem(content: .text("pinned"))
+        store.addItem(pinned)
+        store.togglePin(id: pinned.id)
+
+        for i in 0..<(HistoryStore.limit + 10) {
+            store.addItem(ClipboardItem(content: .text("u\(i)")))
+        }
+
+        XCTAssertTrue(store.items.contains { $0.id == pinned.id })
+        XCTAssertEqual(store.items.filter { !$0.isPinned }.count, HistoryStore.limit)
+        XCTAssertEqual(store.items.first?.isPinned, true)
+    }
+
+    func testPinnedItemsAreNotPrunedByTTL() {
+        let oldPinned = ClipboardItem(
+            content: .text("ancient"),
+            timestamp: Date().addingTimeInterval(-HistoryStore.maxAge - 100),
+            isPinned: true
+        )
+        let oldUnpinned = ClipboardItem(
+            content: .text("old"),
+            timestamp: Date().addingTimeInterval(-HistoryStore.maxAge - 100)
+        )
+        let recent = ClipboardItem(content: .text("recent"))
+
+        let json = try! JSONEncoder().encode([oldPinned, oldUnpinned, recent])
+        let path = tempDir.appendingPathComponent("history.json")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try! json.write(to: path)
+
+        let loaded = HistoryStore(baseURL: tempDir, autoPrune: false)
+
+        XCTAssertEqual(loaded.items.count, 2)
+        XCTAssertTrue(loaded.items.contains { $0.id == oldPinned.id })
+        XCTAssertFalse(loaded.items.contains { $0.id == oldUnpinned.id })
+    }
+
+    func testAddItemInsertsAfterPinnedSection() {
+        let store = makeStore()
+        let pinned = ClipboardItem(content: .text("p"))
+        store.addItem(pinned)
+        store.togglePin(id: pinned.id)
+
+        let fresh = ClipboardItem(content: .text("fresh"))
+        store.addItem(fresh)
+
+        XCTAssertEqual(store.items.first?.id, pinned.id)
+        XCTAssertEqual(store.items[1].id, fresh.id)
+    }
+
+    func testPromoteUnpinnedDoesNotCrossPinnedSection() {
+        let store = makeStore()
+        let pinned = ClipboardItem(content: .text("p"))
+        store.addItem(pinned)
+        store.togglePin(id: pinned.id)
+
+        store.addItem(ClipboardItem(content: .text("u1")))
+        let bottom = ClipboardItem(content: .text("u-bottom"))
+        store.addItem(bottom)
+        store.promote(id: bottom.id)
+        XCTAssertEqual(store.items.first?.id, pinned.id, "pinned still on top")
+
+        let u1Id = store.items.last!.id
+        store.promote(id: u1Id)
+        XCTAssertEqual(store.items[1].id, u1Id)
+    }
+
+    func testPromotePinnedMovesWithinPinnedSection() {
+        let store = makeStore()
+        let p1 = ClipboardItem(content: .text("p1"), timestamp: Date().addingTimeInterval(-100))
+        let p2 = ClipboardItem(content: .text("p2"), timestamp: Date())
+        store.addItem(p1)
+        store.addItem(p2)
+        store.togglePin(id: p1.id)
+        store.togglePin(id: p2.id)
+
+        store.promote(id: p1.id)
+        XCTAssertEqual(store.items.first?.id, p1.id)
+        XCTAssertEqual(store.items[1].id, p2.id)
+    }
+
+    func testPinnedSectionSortedByTimestampDesc() {
+        let store = makeStore()
+        let oldest = ClipboardItem(content: .text("oldest"), timestamp: Date().addingTimeInterval(-300))
+        let middle = ClipboardItem(content: .text("middle"), timestamp: Date().addingTimeInterval(-200))
+        let newest = ClipboardItem(content: .text("newest"), timestamp: Date().addingTimeInterval(-100))
+        store.addItem(oldest)
+        store.addItem(middle)
+        store.addItem(newest)
+
+        store.togglePin(id: oldest.id)
+        store.togglePin(id: newest.id)
+        store.togglePin(id: middle.id)
+
+        XCTAssertEqual(store.items[0].id, newest.id)
+        XCTAssertEqual(store.items[1].id, middle.id)
+        XCTAssertEqual(store.items[2].id, oldest.id)
+    }
+
+    func testRepinningAfterPromoteRestoresTimestampOrder() {
+        let store = makeStore()
+        let a = ClipboardItem(content: .text("a"), timestamp: Date().addingTimeInterval(-200))
+        let b = ClipboardItem(content: .text("b"), timestamp: Date().addingTimeInterval(-100))
+        store.addItem(a)
+        store.addItem(b)
+        store.togglePin(id: a.id)
+        store.togglePin(id: b.id)
+
+        store.promote(id: a.id)
+        XCTAssertEqual(store.items[0].id, a.id)
+
+        store.togglePin(id: a.id)
+        store.togglePin(id: a.id)
+        XCTAssertEqual(store.items[0].id, b.id)
+        XCTAssertEqual(store.items[1].id, a.id)
+    }
 }

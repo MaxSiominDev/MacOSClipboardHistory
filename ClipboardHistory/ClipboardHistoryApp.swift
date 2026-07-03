@@ -52,17 +52,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteAction: @MainActor (ClipboardItem) -> Void = { [weak self] item in
             self?.performPaste(item)
         }
+        let activateKeyboard: @MainActor () -> Void = { [weak self] in
+            self?.panel.activateForKeyboard()
+        }
 
         panel = PopupPanel(
             content: PopupView()
                 .environmentObject(store)
                 .environment(\.pasteAction, pasteAction)
+                .environment(\.activatePanelKeyboard, activateKeyboard)
         )
+        panel.onVisibilityChanged = { [weak self] visible in
+            self?.hotKey.isPanelVisible = visible
+        }
 
         watcher.start()
 
         hotKey.onHotKey = { [weak self] in
             self?.toggleFromHotKey()
+        }
+        hotKey.onSearchHotKey = { [weak self] in
+            guard let self else { return }
+            self.panel.activateForKeyboard()
+            NotificationCenter.default.post(name: .popupOpenSearch, object: nil)
         }
         hotKey.start()
 
@@ -194,10 +206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func performPaste(_ item: ClipboardItem) {
         let content = item.content
         let target = panel.targetApp
-        store.promote(id: item.id)
         PasteSimulator.setPasteboard(content, store: store)
         watcher.ignoreCurrentChange()
         panel.hide()
+        target?.activate(options: [])
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) {
             PasteSimulator.sendPaste(for: content, target: target)
         }
