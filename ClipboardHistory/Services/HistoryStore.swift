@@ -5,6 +5,7 @@ import Combine
 final class HistoryStore: ObservableObject {
     static let limit = 300
     static let maxAge: TimeInterval = 2 * 24 * 3600  // 2 days
+    static let pinLimit = 50
 
     @Published private(set) var items: [ClipboardItem] = []
 
@@ -40,10 +41,18 @@ final class HistoryStore: ObservableObject {
         imagesURL.appendingPathComponent(filename)
     }
 
+    var pinnedCount: Int {
+        items.lazy.filter(\.isPinned).count
+    }
+
+    private var firstUnpinnedIndex: Int {
+        items.firstIndex(where: { !$0.isPinned }) ?? items.count
+    }
+
     func addItem(_ item: ClipboardItem) {
         pruneExpired(scheduleSaveIfChanged: false)
-        items.insert(item, at: 0)
-        while items.count > Self.limit {
+        items.insert(item, at: firstUnpinnedIndex)
+        while items.filter({ !$0.isPinned }).count > Self.limit {
             let removed = items.removeLast()
             deleteFile(for: removed)
         }
@@ -51,9 +60,35 @@ final class HistoryStore: ObservableObject {
     }
 
     func promote(id: UUID) {
-        guard let idx = items.firstIndex(where: { $0.id == id }), idx > 0 else { return }
-        let item = items.remove(at: idx)
-        items.insert(item, at: 0)
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        let item = items[idx]
+        let target = item.isPinned ? 0 : firstUnpinnedIndex
+        if idx == target { return }
+        items.remove(at: idx)
+        items.insert(item, at: target)
+        scheduleSave()
+    }
+
+    func togglePin(id: UUID) {
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        var item = items[idx]
+        if item.isPinned {
+            item.isPinned = false
+            items.remove(at: idx)
+            let target = items.firstIndex(where: { !$0.isPinned }) ?? items.count
+            items.insert(item, at: target)
+        } else {
+            guard pinnedCount < Self.pinLimit else { return }
+            item.isPinned = true
+            items.remove(at: idx)
+            let pinEnd = firstUnpinnedIndex
+            var insertAt = pinEnd
+            for i in 0..<pinEnd where items[i].timestamp < item.timestamp {
+                insertAt = i
+                break
+            }
+            items.insert(item, at: insertAt)
+        }
         scheduleSave()
     }
 
@@ -92,7 +127,7 @@ final class HistoryStore: ObservableObject {
         let cutoff = Date().addingTimeInterval(-Self.maxAge)
         var changed = false
         items.removeAll { item in
-            if item.timestamp < cutoff {
+            if !item.isPinned && item.timestamp < cutoff {
                 deleteFile(for: item)
                 changed = true
                 return true

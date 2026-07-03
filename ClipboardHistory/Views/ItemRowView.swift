@@ -13,24 +13,16 @@ struct ItemRowView: View {
             pasteAction(item)
         } label: {
             HStack(alignment: .top, spacing: 10) {
+                if item.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tint)
+                        .rotationEffect(.degrees(45))
+                        .padding(.top, 2)
+                }
                 contentView
                 Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Button {
-                        store.deleteItem(id: item.id)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .imageScale(.medium)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(hovering ? 1 : 0)
-                    .help("Delete")
-                    Text(item.timestamp.formatted(.relative(presentation: .numeric)))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .fixedSize()
-                }
+                trailingControls
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -39,6 +31,49 @@ struct ItemRowView: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+
+    private var trailingControls: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 6) {
+                Button {
+                    store.togglePin(id: item.id)
+                } label: {
+                    Image(systemName: item.isPinned ? "pin.slash" : "pin")
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!item.isPinned && store.pinnedCount >= HistoryStore.pinLimit)
+                .help(item.isPinned ? "Unpin" : (store.pinnedCount >= HistoryStore.pinLimit ? "Pin limit reached (\(HistoryStore.pinLimit))" : "Pin"))
+
+                Button {
+                    store.promote(id: item.id)
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Move to top")
+
+                Button {
+                    store.deleteItem(id: item.id)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .imageScale(.medium)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Delete")
+            }
+            .opacity(hovering ? 1 : 0)
+
+            Text(item.timestamp.formatted(.relative(presentation: .numeric)))
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .fixedSize()
+        }
     }
 
     @ViewBuilder

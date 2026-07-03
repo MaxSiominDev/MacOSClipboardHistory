@@ -5,7 +5,7 @@ macOS menu bar clipboard history. Hit ⌘⇧V to open it next to your text caret
 ## Install
 
 ```sh
-brew tap maxsiomin/cliph
+brew tap maxsiomindev/cliph
 brew install --cask cliph
 ```
 

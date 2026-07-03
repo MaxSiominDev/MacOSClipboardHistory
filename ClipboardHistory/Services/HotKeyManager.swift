@@ -5,6 +5,9 @@ import Carbon.HIToolbox
 
 final class HotKeyManager {
     var onHotKey: (@MainActor () -> Void)?
+    var onSearchHotKey: (@MainActor () -> Void)?
+
+    nonisolated(unsafe) var isPanelVisible: Bool = false
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -57,6 +60,7 @@ final class HotKeyManager {
             let isCmd = flags.contains(.maskCommand)
             let isShift = flags.contains(.maskShift)
             let isV = keycode == Int64(kVK_ANSI_V)
+            let isF = keycode == Int64(kVK_ANSI_F)
 
             if isCmd && isShift && isV && !isRepeat {
                 if let refcon {
@@ -66,6 +70,18 @@ final class HotKeyManager {
                     }
                 }
                 return nil
+            }
+
+            if isCmd && !isShift && isF && !isRepeat {
+                if let refcon {
+                    let mgr = Unmanaged<HotKeyManager>.fromOpaque(refcon).takeUnretainedValue()
+                    if mgr.isPanelVisible {
+                        Task { @MainActor in
+                            mgr.onSearchHotKey?()
+                        }
+                        return nil
+                    }
+                }
             }
 
             return Unmanaged.passUnretained(event)

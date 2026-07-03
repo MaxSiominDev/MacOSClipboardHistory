@@ -32,4 +32,34 @@ final class ClipboardItemTests: XCTestCase {
         let decoded = try JSONDecoder().decode([ClipboardItem].self, from: data)
         XCTAssertEqual(decoded.map(\.id), items.map(\.id))
     }
+
+    func testIsPinnedDefaultsFalse() {
+        let item = ClipboardItem(content: .text("a"))
+        XCTAssertFalse(item.isPinned)
+    }
+
+    func testCodableRoundTripPreservesIsPinned() throws {
+        let original = ClipboardItem(content: .text("p"), isPinned: true)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ClipboardItem.self, from: data)
+        XCTAssertTrue(decoded.isPinned)
+    }
+
+    func testDecodingLegacyJsonWithoutIsPinnedDefaultsToFalse() throws {
+        let id = UUID()
+        let when = Date(timeIntervalSince1970: 900_000_000)
+        let legacyJSON = """
+        {
+          "id": "\(id.uuidString)",
+          "content": {"type": "text", "value": "legacy"},
+          "timestamp": \(when.timeIntervalSinceReferenceDate)
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(ClipboardItem.self, from: legacyJSON)
+
+        XCTAssertEqual(decoded.id, id)
+        XCTAssertEqual(decoded.content, .text("legacy"))
+        XCTAssertFalse(decoded.isPinned)
+    }
 }

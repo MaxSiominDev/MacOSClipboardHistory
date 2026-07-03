@@ -4,6 +4,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let popupWillShow = Notification.Name("popupWillShow")
+    static let popupOpenSearch = Notification.Name("popupOpenSearch")
 }
 
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
@@ -23,6 +24,7 @@ final class PopupPanel: NSPanel {
 
     private(set) var lastHideTime: TimeInterval = 0
     var targetApp: NSRunningApplication?
+    var onVisibilityChanged: ((Bool) -> Void)?
     private var globalClickMonitor: Any?
 
     init<Content: View>(content: Content) {
@@ -88,7 +90,17 @@ final class PopupPanel: NSPanel {
     func hide() {
         lastHideTime = ProcessInfo.processInfo.systemUptime
         removeOutsideClickMonitor()
+        if isKeyWindow {
+            resignKey()
+        }
         orderOut(nil)
+        onVisibilityChanged?(false)
+    }
+
+    func activateForKeyboard() {
+        if !isKeyWindow {
+            makeKey()
+        }
     }
 
     private func present() {
@@ -96,6 +108,7 @@ final class PopupPanel: NSPanel {
         invalidateShadow()
         installOutsideClickMonitor()
         NotificationCenter.default.post(name: .popupWillShow, object: nil)
+        onVisibilityChanged?(true)
     }
 
     private func placeBelow(anchorTop: NSPoint) {
@@ -209,4 +222,5 @@ final class PopupPanel: NSPanel {
 
 extension EnvironmentValues {
     @Entry var pasteAction: @MainActor (ClipboardItem) -> Void = { _ in }
+    @Entry var activatePanelKeyboard: @MainActor () -> Void = { }
 }
