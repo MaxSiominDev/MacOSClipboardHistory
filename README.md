@@ -16,6 +16,7 @@ On first launch grant Accessibility in System Settings -> Privacy & Security -> 
 - ⌘⇧V opens the panel near the caret
 - `cliph` from a terminal opens it too
 - Click a row to paste, hover and click ✕ to delete
+- Press and hold a row with an image to preview it full size
 
 History keeps the last 300 items for up to 2 days
 

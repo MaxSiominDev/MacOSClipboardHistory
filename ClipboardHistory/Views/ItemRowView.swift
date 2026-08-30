@@ -4,12 +4,18 @@ import AppKit
 struct ItemRowView: View {
     @EnvironmentObject var store: HistoryStore
     @Environment(\.pasteAction) private var pasteAction
+    @Environment(\.showImagePreview) private var showImagePreview
+    @Environment(\.hideImagePreview) private var hideImagePreview
     let item: ClipboardItem
 
     @State private var hovering = false
+    @State private var holdTask: Task<Void, Never>?
+    @State private var holdCompleted = false
+    @State private var previewOpen = false
 
     var body: some View {
         Button {
+            guard !holdCompleted else { return }
             pasteAction(item)
         } label: {
             HStack(alignment: .top, spacing: 10) {
@@ -21,6 +27,8 @@ struct ItemRowView: View {
                         .padding(.top, 2)
                 }
                 contentView
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(holdGesture, isEnabled: isImage)
                 Spacer(minLength: 8)
                 trailingControls
             }
@@ -31,6 +39,46 @@ struct ItemRowView: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .onDisappear { endHold() }
+    }
+
+    private var isImage: Bool {
+        if case .image = item.content { return true }
+        return false
+    }
+
+    private var holdGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in beginHold() }
+            .onEnded { _ in endHold() }
+    }
+
+    private func beginHold() {
+        guard holdTask == nil else { return }
+        // Reset only here: the click ending this hold can arrive after endHold(), and must not paste.
+        holdCompleted = false
+        holdTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            holdCompleted = true
+            openPreview()
+        }
+    }
+
+    private func endHold() {
+        holdTask?.cancel()
+        holdTask = nil
+        if previewOpen {
+            previewOpen = false
+            hideImagePreview()
+        }
+    }
+
+    private func openPreview() {
+        guard case .image(let filename) = item.content,
+              let image = NSImage(contentsOf: store.imageURL(for: filename)) else { return }
+        previewOpen = true
+        showImagePreview(image)
     }
 
     private var trailingControls: some View {

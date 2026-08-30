@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
     private var panel: PopupPanel!
+    private var previewPanel: ImagePreviewPanel!
     private var themeWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -55,15 +56,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let activateKeyboard: @MainActor () -> Void = { [weak self] in
             self?.panel.activateForKeyboard()
         }
+        let showImagePreview: @MainActor (NSImage) -> Void = { [weak self] image in
+            guard let self, let screen = self.panel.screen ?? NSScreen.main else { return }
+            self.previewPanel.show(image: image, on: screen)
+        }
+        let hideImagePreview: @MainActor () -> Void = { [weak self] in
+            self?.previewPanel.hide()
+        }
 
+        previewPanel = ImagePreviewPanel()
         panel = PopupPanel(
             content: PopupView()
                 .environmentObject(store)
                 .environment(\.pasteAction, pasteAction)
                 .environment(\.activatePanelKeyboard, activateKeyboard)
+                .environment(\.showImagePreview, showImagePreview)
+                .environment(\.hideImagePreview, hideImagePreview)
         )
         panel.onVisibilityChanged = { [weak self] visible in
             self?.hotKey.isPanelVisible = visible
+            if !visible {
+                self?.previewPanel.hide()
+            }
         }
 
         watcher.start()
