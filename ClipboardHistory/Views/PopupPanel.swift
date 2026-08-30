@@ -223,4 +223,6 @@ final class PopupPanel: NSPanel {
 extension EnvironmentValues {
     @Entry var pasteAction: @MainActor (ClipboardItem) -> Void = { _ in }
     @Entry var activatePanelKeyboard: @MainActor () -> Void = { }
+    @Entry var showImagePreview: @MainActor (NSImage) -> Void = { _ in }
+    @Entry var hideImagePreview: @MainActor () -> Void = { }
 }
