@@ -18,9 +18,31 @@ jobs:
 
     env:
       IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      TAP_REPOSITORY: MaxSiominDev/homebrew-cliph
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Checked before anything is built, because a release published before them cannot
+      # be taken back.
+      - name: Check the release can be published
+        if: env.IS_RELEASE == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "TAP_TOKEN is not set: add a token with write access to $TAP_REPOSITORY"
+            exit 1
+          fi
+          git fetch origin main
+          # ^{commit} because an annotated tag names a tag object, not the commit.
+          if ! git merge-base --is-ancestor "$TAG^{commit}" origin/main; then
+            echo "$TAG is not on main, and a commit made on top of main would then carry work the tag does not have"
+            exit 1
+          fi
 
       - name: Select Xcode
         run: |
@@ -132,10 +154,77 @@ jobs:
 
             ### Homebrew
             ```sh
-            brew tap maxsiomin/cliph
+            brew tap maxsiomindev/cliph
             brew install --cask cliph
             ```
             ---
             SHA256: `${{ steps.sha.outputs.value }}`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The cask installs the zip attached to the release above, so it can only point at
+      # a tag whose release already exists.
+      - name: Point the cask at the new zip
+        if: env.IS_RELEASE == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ steps.sha.outputs.value }}
+        run: |
+          VERSION="${TAG#v}"
+          if [ -z "$VERSION" ] || [ -z "$SHA" ]; then
+            echo "the version or the checksum came out empty, and a cask with either installs nowhere"
+            exit 1
+          fi
+          # On top of main, not of the tag: the commit has to go somewhere a later tag
+          # will be cut from, and the tag itself is not a branch. Fetched again because
+          # the build and the notarisation left the earlier fetch half an hour behind.
+          git fetch origin main
+          git checkout -B tap-release origin/main
+
+          sed -i '' \
+            -e "s|^  version \".*\"$|  version \"$VERSION\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"$SHA\"|" \
+            Casks/cliph.rb
+          if ! grep -q "^  version \"$VERSION\"$" Casks/cliph.rb || ! grep -q "^  sha256 \"$SHA\"$" Casks/cliph.rb; then
+            echo "the cask did not take the new version and checksum; its version and sha256 lines are not where sed looked"
+            exit 1
+          fi
+
+      # brew installs from the tap, not from this copy, so this is the step that makes the
+      # release reachable. A token, because GITHUB_TOKEN stops at this repository. Before
+      # the commit back to main: this is what users are waiting on, and it reads the file
+      # from the working tree, so the commit cannot cost them the update.
+      - name: Publish the cask to the tap
+        if: env.IS_RELEASE == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/$TAP_REPOSITORY.git" tap
+          mkdir -p tap/Casks
+          cp Casks/cliph.rb tap/Casks/cliph.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/cliph.rb
+          if git diff --cached --quiet; then
+            echo "the tap already has this cask"
+            exit 0
+          fi
+          git commit -m "cliph $TAG"
+          git push
+
+      - name: Commit the cask back to main
+        if: env.IS_RELEASE == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/cliph.rb
+          if git diff --cached --quiet; then
+            echo "main already has this cask"
+            exit 0
+          fi
+          git commit -m "Point the cask at $TAG [skip ci]"
+          git push origin HEAD:main
