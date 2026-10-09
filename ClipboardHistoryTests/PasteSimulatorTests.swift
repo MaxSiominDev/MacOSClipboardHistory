@@ -51,17 +51,24 @@ final class PasteSimulatorTests: XCTestCase {
         XCTAssertTrue(PasteSimulator.terminalBundleIDs.contains("com.mitchellh.ghostty"))
     }
 
-    // A terminal reading the key through the active layout must still see ^V, so the control
-    // character has to travel as the event's text rather than as ⌃ plus the V key.
-    func testControlVKeystrokeCarriesControlCharacterWithoutModifiers() {
+    func testControlVKeystrokeCarriesControlModifierAndNoTextOverride() {
         let events = PasteSimulator.keystrokeEvents(for: .controlV)
         XCTAssertEqual(events.map(\.type), [.keyDown, .keyUp])
 
-        for event in events {
+        for (index, event) in events.enumerated() {
             XCTAssertEqual(event.getIntegerValueField(.keyboardEventKeycode), Int64(kVK_ANSI_V))
-            XCTAssertEqual(event.flags, [])
-            XCTAssertEqual(unicodeString(of: event), [0x16])
+            XCTAssertEqual(event.flags, .maskControl)
+            XCTAssertEqual(unicodeString(of: event), layoutText(ofUntouchedV: index == 0))
         }
+    }
+
+    private func layoutText(ofUntouchedV keyDown: Bool) -> [UniChar] {
+        guard let event = CGEvent(
+            keyboardEventSource: CGEventSource(stateID: .combinedSessionState),
+            virtualKey: CGKeyCode(kVK_ANSI_V),
+            keyDown: keyDown
+        ) else { return [] }
+        return unicodeString(of: event)
     }
 
     func testCommandVKeystrokeCarriesCommandModifier() {
