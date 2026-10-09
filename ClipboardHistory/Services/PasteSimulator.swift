@@ -18,8 +18,6 @@ enum PasteSimulator {
         "com.mitchellh.ghostty"
     ]
 
-    private static let controlVCharacter: UniChar = 0x16
-
     static func setPasteboard(_ content: ItemContent, store: HistoryStore) {
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -66,11 +64,7 @@ enum PasteSimulator {
         case .commandV:
             event.flags = .maskCommand
         case .controlV:
-            // Terminals on the kitty keyboard protocol (Claude Code turns it on in Warp) report keys by
-            // the active layout's codepoint, so a synthesized Ctrl+V never arrives as ^V outside Latin layouts.
-            event.flags = []
-            var character = controlVCharacter
-            event.keyboardSetUnicodeString(stringLength: 1, unicodeString: &character)
+            event.flags = .maskControl
         }
         return event
     }
