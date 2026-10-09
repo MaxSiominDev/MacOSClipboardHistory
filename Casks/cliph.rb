@@ -1,8 +1,8 @@
 # The installed copy lives in MaxSiominDev/homebrew-cliph; this one is edited
 # alongside the source so the two stay in sync.
 cask "cliph" do
-  version "1.0.2"
-  sha256 "f4d71479d5883050c372f6da9ef9f209669bf6193a4c32780d15d8310fde8066"
+  version "1.0.3"
+  sha256 "fef8774ed7b9303eb250dc857ab060c8b0eba264559ef9132616401bb769f9ec"
 
   url "https://github.com/MaxSiominDev/MacOSClipboardHistory/releases/download/v#{version}/ClipboardHistory.zip",
       verified: "github.com/MaxSiominDev/MacOSClipboardHistory/"
