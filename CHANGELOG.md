@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.3 - 2026-10-10
 
 ### Fixed
 - Terminal pasting rolled back to v1.0.1 - after extended testing it was found out it did not work in other terminals
